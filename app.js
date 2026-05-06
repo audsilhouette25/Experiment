@@ -28,12 +28,14 @@ const btnStart   = document.getElementById('btn-start');
 const btnRestart = document.getElementById('btn-restart');
 const btnPrev    = document.getElementById('btn-prev');
 const btnNext    = document.getElementById('btn-next');
+const btnSkip    = document.getElementById('btn-skip');
 
 // ── 상수 ─────────────────────────────────────────────────────────
 const RING_CIRCUMFERENCE = 2 * Math.PI * 52;
 
 // ── 상태 ─────────────────────────────────────────────────────────
 let currentIndex = 0;
+let nextIndex    = 0;   // 전환 화면에서 대기 중인 다음 음원 인덱스
 let playTimer    = null;
 let txTimer      = null;
 let playElapsed  = 0;
@@ -129,19 +131,22 @@ function startSound(index) {
 }
 
 // ── 전환 화면 ────────────────────────────────────────────────────
-function startTransition(nextIndex) {
-  if (nextIndex >= SOUND_LIST.length) {
+function startTransition(idx) {
+  if (idx >= SOUND_LIST.length) {
     stopAll();
     showScreen('end');
     elProgressBar.style.width = '100%';
     return;
   }
 
-  const next = SOUND_LIST[nextIndex];
+  nextIndex = idx;   // 전환 화면용 상태 저장 (바로 넘어가기 버튼이 사용)
+
+  const next = SOUND_LIST[idx];
   elTxNext.textContent      = `다음: ${next.label}`;
   elTxCountdown.textContent = TRANSITION_DURATION;
   showScreen('transition');
 
+  nextIndex = nextIndex;   // 전환 화면용 상태 저장
   let txElapsed = 0;
   clearInterval(txTimer);
   txTimer = setInterval(() => {
@@ -151,7 +156,7 @@ function startTransition(nextIndex) {
 
     if (txElapsed >= TRANSITION_DURATION) {
       clearInterval(txTimer);
-      startSound(nextIndex);
+      startSound(idx);
     }
   }, 1000);
 }
@@ -191,4 +196,10 @@ btnPrev.addEventListener('click', () => {
   if (currentIndex <= 0) return;
   stopAll();
   startSound(currentIndex - 1);
+});
+
+// 전환 화면 → 바로 넘어가기
+btnSkip.addEventListener('click', () => {
+  clearInterval(txTimer);
+  startSound(nextIndex);
 });
