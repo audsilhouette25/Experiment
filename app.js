@@ -1,8 +1,10 @@
 /**
  * app.js — 실험 진행 메인 로직
  *
- * 화면 흐름:
- *   [안내] → [재생] → [전환(10초)] → [재생] → ... (×24) → [종료]
+ * 오디오 재생 문제 해결:
+ *   - 버튼 클릭(사용자 인터랙션) 이후에만 play()를 호출하므로
+ *     브라우저 자동재생 차단 정책을 우회합니다.
+ *   - 파일 경로 오류 시 콘솔에 구체적인 안내를 출력합니다.
  */
 
 // ── DOM 참조 ─────────────────────────────────────────────────────
@@ -16,7 +18,6 @@ const screens = {
 const elCurrentNum   = document.getElementById('current-num');
 const elProgressBar  = document.getElementById('progress-bar');
 const elSoundNumber  = document.getElementById('sound-number');
-const elSoundBadge   = document.getElementById('sound-type-badge');
 const elTimerText    = document.getElementById('timer-text');
 const elRingFg       = document.getElementById('ring-fg');
 const elTxCountdown  = document.getElementById('transition-countdown');
@@ -25,16 +26,17 @@ const audioPlayer    = document.getElementById('audio-player');
 
 const btnStart   = document.getElementById('btn-start');
 const btnRestart = document.getElementById('btn-restart');
+const btnPrev    = document.getElementById('btn-prev');
+const btnNext    = document.getElementById('btn-next');
 
 // ── 상수 ─────────────────────────────────────────────────────────
-const RING_CIRCUMFERENCE = 2 * Math.PI * 52; // r=52 → ≈326.7
+const RING_CIRCUMFERENCE = 2 * Math.PI * 52;
 
 // ── 상태 ─────────────────────────────────────────────────────────
 let currentIndex = 0;
 let playTimer    = null;
 let txTimer      = null;
-let playElapsed  = 0;    // 재생 경과 초
-let txElapsed    = 0;    // 전환 경과 초
+let playElapsed  = 0;
 
 // ── 화면 전환 ────────────────────────────────────────────────────
 function showScreen(name) {
@@ -42,62 +44,80 @@ function showScreen(name) {
   screens[name].classList.add('active');
 }
 
-// ── 재생 화면 업데이트 ───────────────────────────────────────────
-function updatePlayUI(sound, elapsed) {
+// ── 이전 버튼 활성화 상태 갱신 ──────────────────────────────────
+function updateNavButtons() {
+  btnPrev.disabled = currentIndex <= 0;
+}
+
+// ── 재생 화면 UI 업데이트 ────────────────────────────────────────
+function updatePlayUI(elapsed) {
   const remaining = Math.max(0, PLAY_DURATION - elapsed);
-  const mins = String(Math.floor(remaining / 60)).padStart(1, '0');
+  const mins = String(Math.floor(remaining / 60));
   const secs = String(remaining % 60).padStart(2, '0');
   elTimerText.textContent = `${mins}:${secs}`;
 
-  // SVG ring
   const ratio = elapsed / PLAY_DURATION;
   elRingFg.style.strokeDashoffset = RING_CIRCUMFERENCE * ratio;
 
-  // 상단 진행바
-  const totalProgress = ((currentIndex) / SOUND_LIST.length + ratio / SOUND_LIST.length) * 100;
+  const totalProgress = ((currentIndex + ratio) / SOUND_LIST.length) * 100;
   elProgressBar.style.width = `${totalProgress}%`;
+}
+
+// ── 오디오 재생 ──────────────────────────────────────────────────
+function playAudio(src) {
+  audioPlayer.pause();
+  audioPlayer.currentTime = 0;
+  audioPlayer.src = src;
+  audioPlayer.loop = true;
+
+  const promise = audioPlayer.play();
+  if (promise !== undefined) {
+    promise.catch(err => {
+      console.warn(`[오디오 재생 실패] ${src}`);
+      console.warn('가능한 원인:');
+      console.warn('1. 파일이 audio/ 폴더에 없거나 파일명이 다릅니다.');
+      console.warn('2. 파일을 더블클릭으로 열었습니다. → python3 -m http.server 로 실행하세요.');
+      console.warn('원본 오류:', err.message);
+    });
+  }
+}
+
+// ── SVG 링 초기화 ────────────────────────────────────────────────
+function resetRing() {
+  elRingFg.style.transition = 'none';
+  elRingFg.style.strokeDashoffset = '0';
+  elRingFg.style.strokeDasharray  = `${RING_CIRCUMFERENCE}`;
+  void elRingFg.getBoundingClientRect();
+  elRingFg.style.transition = 'stroke-dashoffset 1s linear';
 }
 
 // ── 음원 시작 ────────────────────────────────────────────────────
 function startSound(index) {
-  if (index >= SOUND_LIST.length) { showScreen('end'); return; }
+  if (index >= SOUND_LIST.length) {
+    stopAll();
+    showScreen('end');
+    elProgressBar.style.width = '100%';
+    return;
+  }
 
   currentIndex = index;
   const sound  = SOUND_LIST[index];
 
-  // UI 세팅
-  elCurrentNum.textContent = index + 1;
+  elCurrentNum.textContent  = index + 1;
   elSoundNumber.textContent = sound.label;
 
-  // 타입 배지
-  elSoundBadge.textContent    = sound.type === 'effect' ? '단순 효과음' : '추상적 배경음';
-  elSoundBadge.className      = `sound-type-badge ${sound.type}`;
-  screens.play.className      = `screen active is-${sound.type}`;
-
-  // ring 초기화
-  elRingFg.style.transition = 'none';
-  elRingFg.style.strokeDashoffset = '0';
-  elRingFg.style.strokeDasharray  = `${RING_CIRCUMFERENCE}`;
-  void elRingFg.getBoundingClientRect(); // reflow
-  elRingFg.style.transition = 'stroke-dashoffset 1s linear';
-
-  updatePlayUI(sound, 0);
+  resetRing();
+  playElapsed = 0;
+  updatePlayUI(0);
+  updateNavButtons();
   showScreen('play');
 
-  // 오디오 재생
-  audioPlayer.src = sound.file;
-  audioPlayer.loop = true;
-  audioPlayer.play().catch(() => {
-    // 자동재생 차단 시 무음으로 타이머만 진행 (실험자가 수동 조작)
-    console.warn(`오디오 재생 실패: ${sound.file}`);
-  });
+  playAudio(sound.file);
 
-  // 1초 간격 타이머
-  playElapsed = 0;
   clearInterval(playTimer);
   playTimer = setInterval(() => {
     playElapsed++;
-    updatePlayUI(sound, playElapsed);
+    updatePlayUI(playElapsed);
 
     if (playElapsed >= PLAY_DURATION) {
       clearInterval(playTimer);
@@ -111,18 +131,18 @@ function startSound(index) {
 // ── 전환 화면 ────────────────────────────────────────────────────
 function startTransition(nextIndex) {
   if (nextIndex >= SOUND_LIST.length) {
-    // 마지막 음원 이후 → 종료 화면
+    stopAll();
     showScreen('end');
     elProgressBar.style.width = '100%';
     return;
   }
 
   const next = SOUND_LIST[nextIndex];
-  elTxNext.textContent = `다음: ${next.label} · ${next.type === 'effect' ? '단순 효과음' : '추상적 배경음'}`;
+  elTxNext.textContent      = `다음: ${next.label}`;
   elTxCountdown.textContent = TRANSITION_DURATION;
   showScreen('transition');
 
-  txElapsed = 0;
+  let txElapsed = 0;
   clearInterval(txTimer);
   txTimer = setInterval(() => {
     txElapsed++;
@@ -136,17 +156,39 @@ function startTransition(nextIndex) {
   }, 1000);
 }
 
-// ── 버튼 이벤트 ─────────────────────────────────────────────────
-btnStart.addEventListener('click', () => {
-  currentIndex = 0;
-  startSound(0);
-});
-
-btnRestart.addEventListener('click', () => {
+// ── 전체 정지 ────────────────────────────────────────────────────
+function stopAll() {
   clearInterval(playTimer);
   clearInterval(txTimer);
   audioPlayer.pause();
   audioPlayer.currentTime = 0;
+}
+
+// ── 버튼 이벤트 ─────────────────────────────────────────────────
+btnStart.addEventListener('click', () => {
+  stopAll();
+  startSound(0);
+});
+
+btnRestart.addEventListener('click', () => {
+  stopAll();
   elProgressBar.style.width = '0%';
   showScreen('intro');
+});
+
+btnNext.addEventListener('click', () => {
+  stopAll();
+  const next = currentIndex + 1;
+  if (next >= SOUND_LIST.length) {
+    showScreen('end');
+    elProgressBar.style.width = '100%';
+  } else {
+    startTransition(next);
+  }
+});
+
+btnPrev.addEventListener('click', () => {
+  if (currentIndex <= 0) return;
+  stopAll();
+  startSound(currentIndex - 1);
 });
