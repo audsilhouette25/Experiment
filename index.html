@@ -28,11 +28,66 @@
         소리를 들으며 떠오르는 시각적 심상을 태블릿에 자유롭게 그려 주세요.</p>
         <p class="note">정답은 없습니다. 직관적으로 느껴지는 대로 표현해 주세요.</p>
       </div>
-      <button id="btn-start" class="btn-primary">실험 시작</button>
+      <button id="btn-start" class="btn-primary">다음 →</button>
     </div>
   </div>
 
-  <!-- ② 음원 재생 화면 -->
+  <!-- ② 연습 안내 화면 -->
+  <div id="screen-prac-intro" class="screen">
+    <div class="intro-box">
+      <div class="intro-label">연습 단계</div>
+      <h1 class="intro-title">본 실험 전<br>연습해봅시다</h1>
+      <div class="intro-description">
+        <p>짧은 연습용 음원이 <strong>1분</strong>간 재생됩니다.</p>
+        <p>음원을 들으면서 떠오르는 이미지나 느낌을<br>태블릿에 자유롭게 그려 보세요.</p>
+        <p class="note">연습이 끝나면 본 실험이 시작됩니다.</p>
+      </div>
+      <button id="btn-prac-start" class="btn-primary">연습 시작 →</button>
+    </div>
+  </div>
+
+  <!-- ③ 연습 재생 화면 -->
+  <div id="screen-prac-play" class="screen">
+    <div class="play-header">
+      <div class="prac-badge">연습</div>
+    </div>
+    <div class="play-body">
+      <div class="sound-number prac-label">연습</div>
+      <div class="waveform">
+        <span></span><span></span><span></span><span></span><span></span>
+        <span></span><span></span><span></span><span></span><span></span>
+      </div>
+      <div class="timer-ring-wrap">
+        <svg class="timer-ring" viewBox="0 0 120 120">
+          <circle class="ring-bg" cx="60" cy="60" r="52"/>
+          <circle class="ring-fg" id="prac-ring-fg" cx="60" cy="60" r="52"/>
+        </svg>
+        <div class="timer-text" id="prac-timer-text">1:00</div>
+      </div>
+    </div>
+    <div class="play-nav">
+      <button id="btn-prac-skip" class="nav-btn nav-btn--next">연습 건너뛰기 →</button>
+    </div>
+    <audio id="prac-audio" preload="auto"></audio>
+  </div>
+
+  <!-- ④ 연습 완료 화면 -->
+  <div id="screen-prac-end" class="screen">
+    <div class="intro-box">
+      <div class="intro-label">연습 완료</div>
+      <h1 class="intro-title">연습이<br>끝났습니다</h1>
+      <div class="intro-description">
+        <p>이제 본 실험을 시작합니다.</p>
+        <p>총 <strong>24개</strong>의 음원이 순서대로 재생됩니다.<br>
+        각 음원은 <strong>1분</strong>씩 재생되며, 음원이 바뀔 때마다<br>
+        잠시 대기 화면이 표시됩니다.</p>
+        <p class="note">준비가 되면 아래 버튼을 눌러 주세요.</p>
+      </div>
+      <button id="btn-main-start" class="btn-primary">본 실험 시작 →</button>
+    </div>
+  </div>
+
+  <!-- ⑤ 음원 재생 화면 -->
   <div id="screen-play" class="screen">
     <div class="play-header">
       <div class="progress-bar-wrap">
@@ -47,7 +102,7 @@
 
     <div class="play-body">
       <div class="sound-number" id="sound-number">A01</div>
-      <div class="waveform" id="waveform">
+      <div class="waveform">
         <span></span><span></span><span></span><span></span><span></span>
         <span></span><span></span><span></span><span></span><span></span>
       </div>
@@ -60,7 +115,6 @@
       </div>
     </div>
 
-    <!-- 이전 / 다음 버튼 -->
     <div class="play-nav">
       <button id="btn-prev" class="nav-btn">← 이전 음원</button>
       <button id="btn-next" class="nav-btn nav-btn--next">다음 음원 →</button>
@@ -69,7 +123,7 @@
     <audio id="audio-player" preload="auto"></audio>
   </div>
 
-  <!-- ③ 전환 화면 -->
+  <!-- ⑥ 전환 화면 -->
   <div id="screen-transition" class="screen">
     <div class="transition-box">
       <div class="transition-icon">↓</div>
@@ -80,7 +134,7 @@
     </div>
   </div>
 
-  <!-- ④ 종료 화면 -->
+  <!-- ⑦ 종료 화면 -->
   <div id="screen-end" class="screen">
     <div class="end-box">
       <div class="end-check">✓</div>

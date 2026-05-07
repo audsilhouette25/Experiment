@@ -306,3 +306,24 @@ html, body {
   0%, 100% { transform: translateY(0); }
   50%       { transform: translateY(10px); }
 }
+
+/* ─── 연습 화면 ─────────────────────────────────────────────────── */
+.prac-badge {
+  font-family: var(--font-mono);
+  font-size: 11px; letter-spacing: 0.2em;
+  text-transform: uppercase;
+  padding: 5px 14px;
+  border-radius: 20px;
+  border: 1px solid rgba(200,245,66,.4);
+  color: var(--accent);
+}
+
+.sound-number.prac-label {
+  font-size: clamp(2.5rem, 10vw, 5rem);
+  color: var(--muted);
+}
+
+#screen-prac-play .ring-fg,
+#prac-ring-fg {
+  stroke: var(--accent);
+}

@@ -1,20 +1,22 @@
 /**
  * app.js — 실험 진행 메인 로직
  *
- * 오디오 재생 문제 해결:
- *   - 버튼 클릭(사용자 인터랙션) 이후에만 play()를 호출하므로
- *     브라우저 자동재생 차단 정책을 우회합니다.
- *   - 파일 경로 오류 시 콘솔에 구체적인 안내를 출력합니다.
+ * 화면 흐름:
+ *   [안내] → [연습 안내] → [연습 재생(prac.wav)] → [연습 완료] → [본 실험 A01~A24] → [종료]
  */
 
 // ── DOM 참조 ─────────────────────────────────────────────────────
 const screens = {
   intro:      document.getElementById('screen-intro'),
+  pracIntro:  document.getElementById('screen-prac-intro'),
+  pracPlay:   document.getElementById('screen-prac-play'),
+  pracEnd:    document.getElementById('screen-prac-end'),
   play:       document.getElementById('screen-play'),
   transition: document.getElementById('screen-transition'),
   end:        document.getElementById('screen-end'),
 };
 
+// 본 실험 UI
 const elCurrentNum   = document.getElementById('current-num');
 const elProgressBar  = document.getElementById('progress-bar');
 const elSoundNumber  = document.getElementById('sound-number');
@@ -24,20 +26,31 @@ const elTxCountdown  = document.getElementById('transition-countdown');
 const elTxNext       = document.getElementById('transition-next');
 const audioPlayer    = document.getElementById('audio-player');
 
-const btnStart   = document.getElementById('btn-start');
-const btnRestart = document.getElementById('btn-restart');
-const btnPrev    = document.getElementById('btn-prev');
-const btnNext    = document.getElementById('btn-next');
-const btnSkip    = document.getElementById('btn-skip');
+// 연습 UI
+const pracRingFg     = document.getElementById('prac-ring-fg');
+const pracTimerText  = document.getElementById('prac-timer-text');
+const pracAudio      = document.getElementById('prac-audio');
+
+// 버튼
+const btnStart      = document.getElementById('btn-start');       // 안내→연습안내
+const btnPracStart  = document.getElementById('btn-prac-start'); // 연습 시작
+const btnPracSkip   = document.getElementById('btn-prac-skip'); // 연습 건너뛰기
+const btnMainStart  = document.getElementById('btn-main-start');// 본 실험 시작
+const btnRestart    = document.getElementById('btn-restart');
+const btnPrev       = document.getElementById('btn-prev');
+const btnNext       = document.getElementById('btn-next');
+const btnSkip       = document.getElementById('btn-skip');
 
 // ── 상수 ─────────────────────────────────────────────────────────
 const RING_CIRCUMFERENCE = 2 * Math.PI * 52;
+const PRAC_FILE = 'audio/prac.wav';
 
 // ── 상태 ─────────────────────────────────────────────────────────
 let currentIndex = 0;
-let nextIndex    = 0;   // 전환 화면에서 대기 중인 다음 음원 인덱스
+let nextIndex    = 0;
 let playTimer    = null;
 let txTimer      = null;
+let pracTimer    = null;
 let playElapsed  = 0;
 
 // ── 화면 전환 ────────────────────────────────────────────────────
@@ -46,17 +59,86 @@ function showScreen(name) {
   screens[name].classList.add('active');
 }
 
-// ── 이전 버튼 활성화 상태 갱신 ──────────────────────────────────
+// ── 공통: 오디오 재생 ────────────────────────────────────────────
+function playAudio(player, src) {
+  player.pause();
+  player.currentTime = 0;
+  player.src = src;
+  player.loop = true;
+  const promise = player.play();
+  if (promise !== undefined) {
+    promise.catch(err => {
+      console.warn(`[오디오 재생 실패] ${src}`, err.message);
+    });
+  }
+}
+
+// ── 공통: SVG 링 초기화 ──────────────────────────────────────────
+function resetRing(el) {
+  el.style.transition = 'none';
+  el.style.strokeDashoffset = '0';
+  el.style.strokeDasharray  = `${RING_CIRCUMFERENCE}`;
+  void el.getBoundingClientRect();
+  el.style.transition = 'stroke-dashoffset 1s linear';
+}
+
+// ── 공통: 타이머 텍스트 ──────────────────────────────────────────
+function formatTime(remaining) {
+  const mins = String(Math.floor(remaining / 60));
+  const secs = String(remaining % 60).padStart(2, '0');
+  return `${mins}:${secs}`;
+}
+
+// ── 이전 버튼 상태 ───────────────────────────────────────────────
 function updateNavButtons() {
   btnPrev.disabled = currentIndex <= 0;
 }
 
-// ── 재생 화면 UI 업데이트 ────────────────────────────────────────
+// ── 전체 정지 ────────────────────────────────────────────────────
+function stopAll() {
+  clearInterval(playTimer);
+  clearInterval(txTimer);
+  clearInterval(pracTimer);
+  audioPlayer.pause();
+  audioPlayer.currentTime = 0;
+  pracAudio.pause();
+  pracAudio.currentTime = 0;
+}
+
+// ════════════════════════════════════════════════════════════════
+//  연습 단계
+// ════════════════════════════════════════════════════════════════
+
+function startPrac() {
+  resetRing(pracRingFg);
+  pracTimerText.textContent = formatTime(PLAY_DURATION);
+  showScreen('pracPlay');
+  playAudio(pracAudio, PRAC_FILE);
+
+  let elapsed = 0;
+  clearInterval(pracTimer);
+  pracTimer = setInterval(() => {
+    elapsed++;
+    const remaining = Math.max(0, PLAY_DURATION - elapsed);
+    pracTimerText.textContent = formatTime(remaining);
+    pracRingFg.style.strokeDashoffset = RING_CIRCUMFERENCE * (elapsed / PLAY_DURATION);
+
+    if (elapsed >= PLAY_DURATION) {
+      clearInterval(pracTimer);
+      pracAudio.pause();
+      pracAudio.currentTime = 0;
+      showScreen('pracEnd');
+    }
+  }, 1000);
+}
+
+// ════════════════════════════════════════════════════════════════
+//  본 실험
+// ════════════════════════════════════════════════════════════════
+
 function updatePlayUI(elapsed) {
   const remaining = Math.max(0, PLAY_DURATION - elapsed);
-  const mins = String(Math.floor(remaining / 60));
-  const secs = String(remaining % 60).padStart(2, '0');
-  elTimerText.textContent = `${mins}:${secs}`;
+  elTimerText.textContent = formatTime(remaining);
 
   const ratio = elapsed / PLAY_DURATION;
   elRingFg.style.strokeDashoffset = RING_CIRCUMFERENCE * ratio;
@@ -65,35 +147,6 @@ function updatePlayUI(elapsed) {
   elProgressBar.style.width = `${totalProgress}%`;
 }
 
-// ── 오디오 재생 ──────────────────────────────────────────────────
-function playAudio(src) {
-  audioPlayer.pause();
-  audioPlayer.currentTime = 0;
-  audioPlayer.src = src;
-  audioPlayer.loop = true;
-
-  const promise = audioPlayer.play();
-  if (promise !== undefined) {
-    promise.catch(err => {
-      console.warn(`[오디오 재생 실패] ${src}`);
-      console.warn('가능한 원인:');
-      console.warn('1. 파일이 audio/ 폴더에 없거나 파일명이 다릅니다.');
-      console.warn('2. 파일을 더블클릭으로 열었습니다. → python3 -m http.server 로 실행하세요.');
-      console.warn('원본 오류:', err.message);
-    });
-  }
-}
-
-// ── SVG 링 초기화 ────────────────────────────────────────────────
-function resetRing() {
-  elRingFg.style.transition = 'none';
-  elRingFg.style.strokeDashoffset = '0';
-  elRingFg.style.strokeDasharray  = `${RING_CIRCUMFERENCE}`;
-  void elRingFg.getBoundingClientRect();
-  elRingFg.style.transition = 'stroke-dashoffset 1s linear';
-}
-
-// ── 음원 시작 ────────────────────────────────────────────────────
 function startSound(index) {
   if (index >= SOUND_LIST.length) {
     stopAll();
@@ -108,13 +161,13 @@ function startSound(index) {
   elCurrentNum.textContent  = index + 1;
   elSoundNumber.textContent = sound.label;
 
-  resetRing();
+  resetRing(elRingFg);
   playElapsed = 0;
   updatePlayUI(0);
   updateNavButtons();
   showScreen('play');
 
-  playAudio(sound.file);
+  playAudio(audioPlayer, sound.file);
 
   clearInterval(playTimer);
   playTimer = setInterval(() => {
@@ -130,7 +183,6 @@ function startSound(index) {
   }, 1000);
 }
 
-// ── 전환 화면 ────────────────────────────────────────────────────
 function startTransition(idx) {
   if (idx >= SOUND_LIST.length) {
     stopAll();
@@ -139,20 +191,18 @@ function startTransition(idx) {
     return;
   }
 
-  nextIndex = idx;   // 전환 화면용 상태 저장 (바로 넘어가기 버튼이 사용)
+  nextIndex = idx;
 
   const next = SOUND_LIST[idx];
   elTxNext.textContent      = `다음: ${next.label}`;
   elTxCountdown.textContent = TRANSITION_DURATION;
   showScreen('transition');
 
-  nextIndex = nextIndex;   // 전환 화면용 상태 저장
   let txElapsed = 0;
   clearInterval(txTimer);
   txTimer = setInterval(() => {
     txElapsed++;
-    const remaining = TRANSITION_DURATION - txElapsed;
-    elTxCountdown.textContent = remaining;
+    elTxCountdown.textContent = TRANSITION_DURATION - txElapsed;
 
     if (txElapsed >= TRANSITION_DURATION) {
       clearInterval(txTimer);
@@ -161,26 +211,34 @@ function startTransition(idx) {
   }, 1000);
 }
 
-// ── 전체 정지 ────────────────────────────────────────────────────
-function stopAll() {
-  clearInterval(playTimer);
-  clearInterval(txTimer);
-  audioPlayer.pause();
-  audioPlayer.currentTime = 0;
-}
-
 // ── 버튼 이벤트 ─────────────────────────────────────────────────
+
+// 안내 → 연습 안내
 btnStart.addEventListener('click', () => {
+  showScreen('pracIntro');
+});
+
+// 연습 안내 → 연습 재생
+btnPracStart.addEventListener('click', () => {
+  startPrac();
+});
+
+// 연습 건너뛰기 → 연습 완료 화면
+btnPracSkip.addEventListener('click', () => {
+  clearInterval(pracTimer);
+  pracAudio.pause();
+  pracAudio.currentTime = 0;
+  showScreen('pracEnd');
+});
+
+// 연습 완료 → 본 실험 시작
+btnMainStart.addEventListener('click', () => {
   stopAll();
+  elProgressBar.style.width = '0%';
   startSound(0);
 });
 
-btnRestart.addEventListener('click', () => {
-  stopAll();
-  elProgressBar.style.width = '0%';
-  showScreen('intro');
-});
-
+// 본 실험: 다음 음원
 btnNext.addEventListener('click', () => {
   stopAll();
   const next = currentIndex + 1;
@@ -192,14 +250,22 @@ btnNext.addEventListener('click', () => {
   }
 });
 
+// 본 실험: 이전 음원
 btnPrev.addEventListener('click', () => {
   if (currentIndex <= 0) return;
   stopAll();
   startSound(currentIndex - 1);
 });
 
-// 전환 화면 → 바로 넘어가기
+// 전환 화면: 바로 넘어가기
 btnSkip.addEventListener('click', () => {
   clearInterval(txTimer);
   startSound(nextIndex);
+});
+
+// 처음으로
+btnRestart.addEventListener('click', () => {
+  stopAll();
+  elProgressBar.style.width = '0%';
+  showScreen('intro');
 });
